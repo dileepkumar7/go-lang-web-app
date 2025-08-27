@@ -20,7 +20,7 @@ pipeline {
                             *Build Number:* #${env.BUILD_NUMBER}  
                             *Build URL:* <${env.BUILD_URL}|Open Build>
                         """,
-                        tokenCredentialId: 'slack-go'
+                        tokenCredentialId: 'slack-go-web'
                     )
                     emailext(
                         subject: "🔔 BUILD STARTED: Job '${env.JOB_NAME}' [#${env.BUILD_NUMBER}]",
@@ -78,7 +78,41 @@ Jenkins
                 sh 'go test ./...'
             }
         }
+      stage('Build Docker Image') {
+            steps {
+                sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh """
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                    """
+                }
+            }
+        }
+
+        stage('Update Helm Chart') {
+            steps {
+                script {
+                    def valuesFile = 'helm/go-web-app/values.yaml' // Replace with actual chart path
+
+                    sh """
+                        sed -i 's|tag:.*|tag: "${IMAGE_TAG}"|' ${valuesFile}
+                        git config user.email "jenkins@devopstrend.com"
+                        git config user.name "jenkins"
+                        git add ${valuesFile}
+                        git commit -m "Update Helm chart with image tag ${IMAGE_TAG}"
+                        git push https://${GIT_CREDS}@github.com/dileepkumar7/go-lang-web-app.git HEAD:main
+                    """
+                }
+            }
+        }
     }
+
 
     post {
         success {
@@ -112,7 +146,7 @@ Jenkins
                     *Commit ID:* ${env.COMMIT_ID}  
                     *Build URL:* <${env.BUILD_URL}console|Console Log>
                 """,
-                tokenCredentialId: 'slack-go'
+                tokenCredentialId: 'slack-go-web'
             )
         }
 
