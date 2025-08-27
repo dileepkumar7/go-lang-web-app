@@ -1,53 +1,53 @@
 pipeline {
     agent any
 
-  environment {
-    IMAGE_NAME = 'hapy1308/go-web-app'
-    IMAGE_TAG = "${env.BUILD_NUMBER}"
-  }
+    environment {
+        IMAGE_NAME = 'hapy1308/go-web-app'
+        COMMIT_ID = ''
+        IMAGE_TAG = ''
+    }
+
     stages {
         stage('Clone Repo from SCM') {
             steps {
                 echo 'Cloning source code from vs system'
-                git branch: 'main', 
-                changelog: false,
-                poll: false, 
-                url: 'https://github.com/dileepkumar7/go-lang-web-app.git'
+                git branch: 'main',
+                    changelog: false,
+                    poll: false,
+                    url: 'https://github.com/dileepkumar7/go-lang-web-app.git'
+                script {
+                    COMMIT_ID = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                    env.COMMIT_ID = COMMIT_ID
+                    env.IMAGE_TAG = "${env.BUILD_NUMBER}-${COMMIT_ID}"
+                }
             }
         }
-        
-        stage('Check code Quality Ananlysis'){
-            steps{
-sh '''
-  curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
-  $(go env GOPATH)/bin/golangci-lint run
-'''
 
+        stage('Check code Quality Ananlysis') {
+            steps {
+                sh '''
+                    curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+                    $(go env GOPATH)/bin/golangci-lint run
+                '''
             }
         }
-        
-        stage('Build code '){
-            steps{
+
+        stage('Build code') {
+            steps {
                 echo 'Building code'
                 sh 'go build -o go-lang-app'
             }
         }
-        stage('Running Unit Test Cases'){
-            steps{
+
+        stage('Running Unit Test Cases') {
+            steps {
                 echo 'Unit Test cases started!'
                 sh 'go test ./...'
             }
         }
-        stage('Building Docker Image'){
-            steps{
-                echo 'Build docker image'
-                sh 'docker build -t $IMAGE_NAME:$IMAGE_TAG .'
-                
-            }
-        }
     }
-    
-     post {
+
+    post {
         success {
             emailext(
                 subject: "✅ SUCCESS: Job '${env.JOB_NAME}' [#${env.BUILD_NUMBER}]",
@@ -57,6 +57,7 @@ The Jenkins build completed successfully.
 
 • Job Name: ${env.JOB_NAME}
 • Build Number: #${env.BUILD_NUMBER}
+• Commit ID: ${env.COMMIT_ID}
 • Build URL: ${env.BUILD_URL}
 
 Please check the attached build log for details.
@@ -68,7 +69,18 @@ Jenkins
                 attachLog: true
             )
 
-
+            slackSend(
+                channel: '#go-web-app',
+                color: 'good',
+                message: """
+                    ✅ *Build Success!*  
+                    *Job:* `${env.JOB_NAME}`  
+                    *Build Number:* #${env.BUILD_NUMBER}  
+                    *Commit ID:* ${env.COMMIT_ID}  
+                    *Build URL:* <${env.BUILD_URL}console|Console Log>
+                """,
+                tokenCredentialId: 'slack-go-web'  // Make sure this is your Slack token credential ID in Jenkins
+            )
         }
 
         failure {
@@ -80,6 +92,7 @@ The Jenkins build has FAILED.
 
 • Job Name: ${env.JOB_NAME}
 • Build Number: #${env.BUILD_NUMBER}
+• Commit ID: ${env.COMMIT_ID}
 • Build URL: ${env.BUILD_URL}
 
 Please check the attached build log for error details.
@@ -90,8 +103,20 @@ Jenkins
                 to: 'psaikishore12@gmail.com,dileep16k@gmail.com',
                 attachLog: true
             )
+
+            slackSend(
+                channel: '#go-web-app',
+                color: 'danger',
+                message: """
+                    ❌ *Build Failed!*  
+                    *Job:* `${env.JOB_NAME}`  
+                    *Build Number:* #${env.BUILD_NUMBER}  
+                    *Commit ID:* ${env.COMMIT_ID}  
+                    *Build URL:* <${env.BUILD_URL}console|Console Log>
+                    Please check the logs for more details.
+                """,
+                tokenCredentialId: 'slack-go-web'  // Use your Slack token credential ID here
+            )
         }
     }
 }
-    
-
