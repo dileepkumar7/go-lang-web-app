@@ -1,0 +1,97 @@
+pipeline {
+    agent any
+
+  environment {
+    IMAGE_NAME = 'hapy1308/go-web-app'
+    IMAGE_TAG = "${env.BUILD_NUMBER}"
+  }
+    stages {
+        stage('Clone Repo from SCM') {
+            steps {
+                echo 'Cloning source code from vs system'
+                git branch: 'main', 
+                changelog: false,
+                poll: false, 
+                url: 'https://github.com/dileepkumar7/go-lang-web-app.git'
+            }
+        }
+        
+        stage('Check code Quality Ananlysis'){
+            steps{
+sh '''
+  curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+  $(go env GOPATH)/bin/golangci-lint run
+'''
+
+            }
+        }
+        
+        stage('Build code '){
+            steps{
+                echo 'Building code'
+                sh 'go build -o go-lang-app'
+            }
+        }
+        stage('Running Unit Test Cases'){
+            steps{
+                echo 'Unit Test cases started!'
+                sh 'go test ./...'
+            }
+        }
+        stage('Building Docker Image'){
+            steps{
+                echo 'Build docker image'
+                sh 'docker build -t $IMAGE_NAME:$IMAGE_TAG .'
+                
+            }
+        }
+    }
+    
+     post {
+        success {
+            emailext(
+                subject: "✅ SUCCESS: Job '${env.JOB_NAME}' [#${env.BUILD_NUMBER}]",
+                body: """Hi Team,
+
+The Jenkins build completed successfully.
+
+• Job Name: ${env.JOB_NAME}
+• Build Number: #${env.BUILD_NUMBER}
+• Build URL: ${env.BUILD_URL}
+
+Please check the attached build log for details.
+
+Thanks,
+Jenkins
+""",
+                to: 'psaikishore12@gmail.com,dileep16k@gmail.com',
+                attachLog: true
+            )
+
+
+        }
+
+        failure {
+            emailext(
+                subject: "❌ FAILURE: Job '${env.JOB_NAME}' [#${env.BUILD_NUMBER}]",
+                body: """Hi Team,
+
+The Jenkins build has FAILED.
+
+• Job Name: ${env.JOB_NAME}
+• Build Number: #${env.BUILD_NUMBER}
+• Build URL: ${env.BUILD_URL}
+
+Please check the attached build log for error details.
+
+Thanks,
+Jenkins
+""",
+                to: 'psaikishore12@gmail.com,dileep16k@gmail.com',
+                attachLog: true
+            )
+        }
+    }
+}
+    
+
