@@ -8,6 +8,39 @@ pipeline {
     }
 
     stages {
+        stage('Notify Build Started') {
+            steps {
+                script {
+                    slackSend(
+                        channel: '#go-web-app',
+                        color: 'warning',
+                        message: """
+                            🔔 *Build Started*  
+                            *Job:* `${env.JOB_NAME}`  
+                            *Build Number:* #${env.BUILD_NUMBER}  
+                            *Build URL:* <${env.BUILD_URL}|Open Build>
+                        """,
+                        tokenCredentialId: 'slack-go'
+                    )
+                    emailext(
+                        subject: "🔔 BUILD STARTED: Job '${env.JOB_NAME}' [#${env.BUILD_NUMBER}]",
+                        body: """Hi Team,
+
+The Jenkins build has started.
+
+• Job Name: ${env.JOB_NAME}
+• Build Number: #${env.BUILD_NUMBER}
+• Build URL: ${env.BUILD_URL}
+
+Thanks,
+Jenkins
+""",
+                        to: 'psaikishore12@gmail.com,dileep16k@gmail.com'
+                    )
+                }
+            }
+        }
+
         stage('Clone Repo from SCM') {
             steps {
                 echo 'Cloning source code from vs system'
@@ -23,7 +56,7 @@ pipeline {
             }
         }
 
-        stage('Check code Quality Ananlysis') {
+        stage('Check code Quality Analysis') {
             steps {
                 sh '''
                     curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
@@ -79,7 +112,7 @@ Jenkins
                     *Commit ID:* ${env.COMMIT_ID}  
                     *Build URL:* <${env.BUILD_URL}console|Console Log>
                 """,
-                tokenCredentialId: 'slack-go-web'  // Make sure this is your Slack token credential ID in Jenkins
+                tokenCredentialId: 'slack-go'
             )
         }
 
@@ -115,7 +148,7 @@ Jenkins
                     *Build URL:* <${env.BUILD_URL}console|Console Log>
                     Please check the logs for more details.
                 """,
-                tokenCredentialId: 'slack-go-web'  // Use your Slack token credential ID here
+                tokenCredentialId: 'slack-go'
             )
         }
     }
