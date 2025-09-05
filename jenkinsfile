@@ -86,7 +86,9 @@ Jenkins
 
         stage('Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                withCredentials([usernamePassword(credentialsId: 'docker-cred', 
+				usernameVariable: 'DOCKER_USER',
+				passwordVariable: 'DOCKER_PASS')]) {
                     sh """
                         echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
                         docker push ${IMAGE_NAME}:${IMAGE_TAG}
@@ -98,12 +100,12 @@ Jenkins
         stage('Update Helm Chart') {
             steps {
                 script {
-                    def valuesFile = 'helm/go-web-app/values.yaml' // Replace with actual chart path
+                    def valuesFile = 'helm/go-lang-app-chart/values.yaml' // Replace with actual chart path
 
                     sh """
                         sed -i 's|tag:.*|tag: "${IMAGE_TAG}"|' ${valuesFile}
-                        git config user.email "jenkins@devopstrend.com"
-                        git config user.name "jenkins"
+                        git config user.email "dileepkumar.atp@gmail.com"
+                        git config user.name "dileep"
                         git add ${valuesFile}
                         git commit -m "Update Helm chart with image tag ${IMAGE_TAG}"
                         git push https://${GIT_CREDS}@github.com/dileepkumar7/go-lang-web-app.git HEAD:main
@@ -186,8 +188,4 @@ Jenkins
             )
         }
     }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> d80277f524a84218134661a22087f62b6a9ca742
