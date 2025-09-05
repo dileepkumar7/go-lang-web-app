@@ -1,0 +1,189 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = 'hapy1308/go-web-app'
+        COMMIT_ID = ''
+        IMAGE_TAG = ''
+    }
+
+    stages {
+        stage('Notify Build Started') {
+            steps {
+                script {
+                    slackSend(
+                        channel: '#go-web-app',
+                        color: 'warning',
+                        message: """
+                            🔔 *Build Started*  
+                            *Job:* `${env.JOB_NAME}`  
+                            *Build Number:* #${env.BUILD_NUMBER}  
+                            *Build URL:* <${env.BUILD_URL}|Open Build>
+                        """,
+                        tokenCredentialId: 'slack-go-web'
+                    )
+                    emailext(
+                        subject: "🔔 BUILD STARTED: Job '${env.JOB_NAME}' [#${env.BUILD_NUMBER}]",
+                        body: """Hi Team,
+
+The Jenkins build has started.
+
+• Job Name: ${env.JOB_NAME}
+• Build Number: #${env.BUILD_NUMBER}
+• Build URL: ${env.BUILD_URL}
+
+Thanks,
+Jenkins
+""",
+                        to: 'psaikishore12@gmail.com,dileep16k@gmail.com'
+                    )
+                }
+            }
+        }
+
+        stage('Clone Repo from SCM') {
+            steps {
+                echo 'Cloning source code from vs system'
+                git branch: 'main',
+                    changelog: false,
+                    poll: false,
+                    url: 'https://github.com/dileepkumar7/go-lang-web-app.git'
+                script {
+                    COMMIT_ID = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                    env.COMMIT_ID = COMMIT_ID
+                    env.IMAGE_TAG = "${env.BUILD_NUMBER}-${COMMIT_ID}"
+                }
+            }
+        }
+
+        stage('Check code Quality Analysis') {
+            steps {
+                sh '''
+                    curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+                    $(go env GOPATH)/bin/golangci-lint run
+                '''
+            }
+        }
+
+        stage('Build code') {
+            steps {
+                echo 'Building code'
+                sh 'go build -o go-lang-app'
+            }
+        }
+
+        stage('Running Unit Test Cases') {
+            steps {
+                echo 'Unit Test cases started!'
+                sh 'go test ./...'
+            }
+        }
+      stage('Build Docker Image') {
+            steps {
+                sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh """
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                    """
+                }
+            }
+        }
+
+        stage('Update Helm Chart') {
+            steps {
+                script {
+                    def valuesFile = 'helm/go-web-app/values.yaml' // Replace with actual chart path
+
+                    sh """
+                        sed -i 's|tag:.*|tag: "${IMAGE_TAG}"|' ${valuesFile}
+                        git config user.email "jenkins@devopstrend.com"
+                        git config user.name "jenkins"
+                        git add ${valuesFile}
+                        git commit -m "Update Helm chart with image tag ${IMAGE_TAG}"
+                        git push https://${GIT_CREDS}@github.com/dileepkumar7/go-lang-web-app.git HEAD:main
+                    """
+                }
+            }
+        }
+    }
+
+
+    post {
+        success {
+            emailext(
+                subject: "✅ SUCCESS: Job '${env.JOB_NAME}' [#${env.BUILD_NUMBER}]",
+                body: """Hi Team,
+
+The Jenkins build completed successfully.
+
+• Job Name: ${env.JOB_NAME}
+• Build Number: #${env.BUILD_NUMBER}
+• Commit ID: ${env.COMMIT_ID}
+• Build URL: ${env.BUILD_URL}
+
+Please check the attached build log for details.
+
+Thanks,
+Jenkins
+""",
+                to: 'psaikishore12@gmail.com,dileep16k@gmail.com',
+                attachLog: true
+            )
+
+            slackSend(
+                channel: '#go-web-app',
+                color: 'good',
+                message: """
+                    ✅ *Build Success!*  
+                    *Job:* `${env.JOB_NAME}`  
+                    *Build Number:* #${env.BUILD_NUMBER}  
+                    *Commit ID:* ${env.COMMIT_ID}  
+                    *Build URL:* <${env.BUILD_URL}console|Console Log>
+                """,
+                tokenCredentialId: 'slack-go-web'
+            )
+        }
+
+        failure {
+            emailext(
+                subject: "❌ FAILURE: Job '${env.JOB_NAME}' [#${env.BUILD_NUMBER}]",
+                body: """Hi Team,
+
+The Jenkins build has FAILED.
+
+• Job Name: ${env.JOB_NAME}
+• Build Number: #${env.BUILD_NUMBER}
+• Commit ID: ${env.COMMIT_ID}
+• Build URL: ${env.BUILD_URL}
+
+Please check the attached build log for error details.
+
+Thanks,
+Jenkins
+""",
+                to: 'psaikishore12@gmail.com,dileep16k@gmail.com',
+                attachLog: true
+            )
+
+            slackSend(
+                channel: '#go-web-app',
+                color: 'danger',
+                message: """
+                    ❌ *Build Failed!*  
+                    *Job:* `${env.JOB_NAME}`  
+                    *Build Number:* #${env.BUILD_NUMBER}  
+                    *Commit ID:* ${env.COMMIT_ID}  
+                    *Build URL:* <${env.BUILD_URL}console|Console Log>
+                    Please check the logs for more details.
+                """,
+                tokenCredentialId: 'slack-go'
+            )
+        }
+    }
+}
